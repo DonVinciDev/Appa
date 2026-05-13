@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { StyleSheet, View, TouchableOpacity, Text, Alert } from 'react-native';
 
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
-
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 
 import { obtenerAreas } from '../services/areasStorage';
 
-export default function MapaScreen({ navigation }) {
+export default function MapaScreen({ navigation, route }) {
 
     // Estados //
+
+    // Referencia al MapView para poder controlarlo
+    const mapaRef = useRef(null);
 
     // Ubucacion inicial del mapa
     const [ubicacion, setUbicacion] = useState(null);
@@ -26,13 +27,14 @@ export default function MapaScreen({ navigation }) {
     // Modo dibujo: true si el usuario esta creando un area. false si solo esta viendo el mapa
     const [modoDibujo, setModoDibujo] = useState(false);
 
-
+    // Area seleccionada que viene desde MisPuntosScreen para mostrarla en el mapa
+    const [areaSeleccionada, setAreaSeleccionada] = useState(null);
     // Efectos //
     
     // Pedir ubicacion al cargar la pantalla
     useEffect(() => {
         (async () => {
-            let { status } = await Location.requestForegroundPermissionsAsync();
+            const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 console.log('Se necesita permiso de ubicación.');
                 return;
@@ -48,18 +50,53 @@ export default function MapaScreen({ navigation }) {
         })();
     }, []);
 
-    // Ek useFocusEffect se ejecuta cada vez que esta pantalla se vuelve activa
-    // lo cual ayuda para refresacar la lista cuando se vuelve desde el formulario
+    
+    // Cargar el area seleccionada //
+    useEffect(() => {
+        // route.params?.areaSeleccionada = si existe route.params y tiene areaSeleccionada, se asigna a esta variable, sino es undefined
+        if (route.params?.areaParaMostrar) {
+            const area = route.params.areaSeleccionada;
+            setAreaSeleccionada(area);
+
+            // Calcualr el centro del poligono para centrar el mapa
+            const centro = calcularCentro(area.vertices);
+
+            // Centrar el mapa en el area seleccionada
+            // el mapRef.current da acceso al componente MapView para poder controlarlo
+            if (mapaRef.current) {
+                mapaRef.current.animateToRegion({
+                    ...centro,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }, 1000); // Animacion de 1 segundo
+            }
+        }
+    }, [route.params?.areaSeleccionada]); // Se ejecuta cuando cambia de area
+
+
+    // Cargar areas al enfocar //
     useFocusEffect(
         useCallback(() => {
             cargarAreas();
         }, [])
     );
 
-    // Funcion para cargar las areas desde AsyncStorage
     const cargarAreas = async () => {
         const areasGuardadas = await obtenerAreas();
         setAreas(areasGuardadas);
+    };
+
+
+    // Calcular centro del poligono //
+
+    // Promedia todas las latitudes y longitudes de los vertices para obtener un punto central aproximado
+    const calcularCentro = (vertices) => {
+        const sumaLat = vertices.reduce((sum, v) => sum + v.latitude, 0);
+        const sumaLng = vertices.reduce((sum, v) => sum + v.longitude, 0);
+        return {
+            latitude: sumaLat / vertices.length,
+            longitude: sumaLng / vertices.length,
+        };
     };
 
 
@@ -70,6 +107,7 @@ export default function MapaScreen({ navigation }) {
         // Solo se agregan vertices si estamos en modo dibujo
         if (!modoDibujo) return;
 
+        // Obtiene coordenadas del toque en el mapa
         const { coordinate } = event.nativeEvent;
 
         // Se agrega el nuevo vertice al array existente
@@ -79,6 +117,7 @@ export default function MapaScreen({ navigation }) {
 
     // Empezar a dibujar un nuevo area
     const iniciarDibujo = () => {
+        setAreaSeleccionada(null); // Se limpia cualquier area seleccionada para mostrar el mapa vacio
         setModoDibujo(true);
         setVerticesActuales([]); // Se limpia cualquier vertice anterior
     };
@@ -99,11 +138,7 @@ export default function MapaScreen({ navigation }) {
     const guardarArea = () => {
         // Validacion que verifica al menos 3 puntos para formar el poligono
         if (verticesActuales.length < 3) {
-            Alert.alert(
-                'Faltan puntos',
-                'Necesitas al menos 3 puntos para crear un área.'
-
-            );
+            Alert.alert('Faltan puntos', 'Necesitas al menos 3 puntos para crear un área.');
             return;
         }
 
@@ -133,9 +168,10 @@ export default function MapaScreen({ navigation }) {
         <View style = {styles.contenedor}>
             
             <MapView
+                ref = {mapaRef}
                 style = {styles.mapa}
-                initialRegion = {ubicacion}
-                onPress = {handleToqueMapa}
+                initialRegion = {ubicacion} // Centra el mapa en la ubicacion del usuario
+                onPress = {handleToqueMapa} // Cada vez que se toca el mapa, se llama a esta funcion para agregar un vertice si estamos en modo dibujo
             >
 
                 {/* Areas ya guardadas */}
@@ -149,7 +185,17 @@ export default function MapaScreen({ navigation }) {
                     />
                 ))}
 
-                {/* Area que se esta dibujando */}
+                {/* Area seleccionada desde MisPuntosScreen */}
+                {areaSeleccionada && (
+                    <Polygon
+                        coordinates = {areaSeleccionada.vertices}
+                        fillColor = "rgba(25, 118, 210, 0.3)" // Azul
+                        strokeColor = "#1976D2" // Azul solido para el borde
+                        strokeWidth = {3} // Un borde mas grueso para destacar el area seleccionada
+                    />
+                )}
+
+                {/* Area que se esta dibujando y solo se dibuja si hay al menos 3 puntos */}
                 {verticesActuales.length >= 3 && (
                     <Polygon
                         coordinates = {verticesActuales}
@@ -171,7 +217,20 @@ export default function MapaScreen({ navigation }) {
 
             </MapView>
 
-            {/* Controles superpuestos al mapa */}
+            {/* Info del area seleccionada */}
+            {areaSeleccionada && !modoDibujo && (
+                <View style = {styles.panelAreaSeleccionada}>
+                    <Text style = {styles.panelTipo}>{areaSeleccionada.tipoPlantacion}</Text>
+                    <Text style = {styles.panelNombre}>{areaSeleccionada.nombreAgricultor}</Text>
+                    <Text style = {styles.panelInfo}> {areaSeleccionada.vertices.length} puntos | {areaSeleccionada.hectareas} ha</Text>
+                
+                    {/* Boton para cerrar el panel */ }
+                    <TouchableOpacity onPress = {() => setAreaSeleccionada(null)}>
+                        <Text style = {styles.panelCerrar}>Cerrar</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
 
             {/* Si no esta en modo dibujo, muestra el boton para empezar */ }
             {!modoDibujo && (
@@ -235,6 +294,38 @@ const styles = StyleSheet.create({
     mapa: { flex: 1 },
     cargando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+    // Panel info del área seleccionada (aparece en la parte superior del mapa)
+    panelAreaSeleccionada: {
+        position: 'absolute',
+        top: 15,
+        left: 15,
+        right: 15,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 15,
+        elevation: 5,
+        borderLeftWidth: 4,
+        borderLeftColor: '#1976D2',  // Línea azul a la izquierda
+    },
+    panelTipo: {
+        color: '#2E7D32',
+        fontWeight: 'bold',
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    panelNombre: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#2c3e50',
+        marginBottom: 4,
+    },
+    panelInfo: { color: 'gray', fontSize: 13, marginBottom: 8 },
+    panelCerrar: {
+        color: '#1976D2',
+        fontWeight: 'bold',
+        textAlign: 'right',
+    },
+
     botonFlotante: {
         position: 'absolute',
         bottom: 30,
@@ -271,12 +362,12 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
     botonesFila: {
-        flexDirection: 'row',     // Coloca los hijos en fila horizontal
+        flexDirection: 'row',
         justifyContent: 'space-between',
         gap: 8,
     },
     botonPequeno: {
-        flex: 1,                  // Cada botón ocupa el mismo espacio
+        flex: 1,
         padding: 12,
         borderRadius: 8,
         alignItems: 'center',

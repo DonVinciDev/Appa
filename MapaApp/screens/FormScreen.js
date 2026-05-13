@@ -6,12 +6,27 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { guardarArea } from '../services/areasStorage';
+import { calcularHectareas } from '../utils/calcularArea';
+
+// Lista de tipos de plantacion disponibles
+const TIPOS_PLANTACION = [
+    'Papa', 'Arroz', 'Maíz', 'Trigo', 'Cebada', 'Tomate', 'Lechuga', 'Zanahoria', 'Frutilla', 'Manzana',
+    'Cebolla', 'Otro'
+];
 
 export default function FormScreen({ navigation, route }) {
     
     // Se recibe la lista de vertices desde el mapa
     const { vertices, onGuardado } = route.params;
 
+    // Calcula las hectareas al cargar el formulario
+    const hectareas = calcularHectareas(vertices);
+
+    
+    // Campos del formulario
+    const [nombreArea, setNombreArea] = useState(''); // Nombre del área
+    const [nombreAgricultor, setNombreAgricultor] = useState(''); // Nombre del agricultor
+    const [tipoPlantacion, setTipoPlantacion] = useState(''); // Tipo de plantación
     const [nombre, setNombre] = useState(''); // Nombre del area
     const [comentario, setComentario] = useState(''); // Comentario adicional
     const [imagen, setImagen] = useState(null); // URI de la imagen seleccionada
@@ -37,17 +52,25 @@ export default function FormScreen({ navigation, route }) {
 
     // Función para guardar el área
     const handleGuardar = async () => {
-        if (!nombre.trim()) {
-            Alert.alert('Error', 'El nombre del área es obligatorio.');
+        if (!nombreAgricultor.trim()) {
+            Alert.alert('Error', 'El nombre del agricultor es obligatorio.');
+            return;
+        }
+
+        if (!tipoPlantacion) {
+            Alert.alert('Error', 'Debe seleccionar un tipo de plantación.');
             return;
         }
 
         // Se arma el objeto del area
         const nuevaArea = {
-            nombre,
+            nombreArea,
+            nombreAgricultor,
+            tipoPlantacion,
             comentario,
             imagen,
             vertices,
+            hectareas,
         };
 
         try {
@@ -71,29 +94,76 @@ export default function FormScreen({ navigation, route }) {
     return (
         <ScrollView contentContainerStyle={styles.contenedor}>
 
-            <Text style = {styles.titulo}>Nueva área de interés</Text>
+            <Text style = {styles.titulo}>Nueva área de cultivo</Text>
 
-            {/* Se muestra la cantidad de vertices utilizados para formar el área */}
+            {/* Informacion del area */}
             <View style = {styles.infoArea}>
-                <Text style = {styles.infoTexto}>
-                    Área definida por {vertices.length} puntos
-                </Text>
+                <View style = {styles.infoFila}>
+                    <Text style = {styles.infoLabel}>Puntos marcados</Text>
+                    <Text style = {styles.infoValor}>{vertices.length} puntos</Text>
+                </View>
+
+                <View style = {styles.separador} />
+                
+                <View style = {styles.infoFila}>
+                    <Text style = {styles.infoLabel}>Área aproximada</Text>
+                    {/* Si las hectareas son muy pequeñas, se muestra en m2 */}
+                    <Text style = {styles.infoValorDestacado}>
+                        {hectareas < 0.01 
+                            ? '${Math.round(hectareas * 10000)} m²'
+                            : '${hectareas} ha'
+                        }
+                    </Text>
+                </View>
             </View>
 
-            {/* Campo para ingresar el nombre del área */}
+            {/* Nombre del area */}
             <Text style = {styles.label}>Nombre del área *</Text>
             <TextInput
                 style = {styles.input}
-                placeholder = "Ej: Parque Central"
-                value = {nombre}
-                onChangeText = {setNombre}
+                placeholder = "Ej: Parcela de papas"
+                value = {nombreArea}
+                onChangeText = {setNombreArea}
             />
 
-            {/* Campo para ingresar un comentario adicional */}
-            <Text style = {styles.label}>Comentario</Text>
+            {/* Nombre del agricultor */}
+            <Text style = {styles.label}>Nombre del agricultor *</Text>
+            <TextInput
+                style = {styles.input}
+                placeholder = "Ej: Juan Pérez"
+                value = {nombreAgricultor}
+                onChangeText = {setNombreAgricultor}
+            />
+
+            {/* Tipo de plantacion */}
+            <Text style = {styles.label}>Tipo de plantación *</Text>
+            <View style = {styles.tiposContenedor}>
+                {TIPOS_PLANTACION.map((tipo) => (
+                    <TouchableOpacity
+                        key = {tipo}
+                        style = {[
+                            styles.tipoBadge,
+                            // Su esta seleccionada, cambia el estilo
+                            tipoPlantacion === tipo && styles.tipoBadgeSeleccionado
+                        ]}
+                        onPress = {() => setTipoPlantacion(tipo)}
+                    >
+                        <Text style = {[
+                            styles.tipoBadgeTexto,
+                            tipoPlantacion === tipo && styles.tipoBadgeTextoSeleccionado
+                        ]}>
+                            {tipo}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+            
+            
+            {/* Campo para ingresar una observacion */}
+            <Text style = {styles.label}>Observaciones</Text>
             <TextInput
                 style = {[styles.input, styles.inputMultilineal]}
-                placeholder = "Ej: Área de juegos para niños"
+                placeholder = "Ej: Estado del terreno, condiciones, etc..."
                 value = {comentario}
                 onChangeText = {setComentario}
                 multiline
@@ -123,23 +193,65 @@ export default function FormScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
     contenedor: { padding: 20, backgroundColor: '#fff' },
-    titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
+    titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, color: '#2c3e50' },
+
+    // Tarjeta de info del área
     infoArea: {
         backgroundColor: '#E8F5E9',
-        padding: 12,
-        borderRadius: 8,
+        borderRadius: 10,
+        padding: 15,
         marginBottom: 20,
     },
-    infoTexto: { color: '#2E7D32', fontWeight: 'bold', textAlign: 'center' },
-    label: { fontWeight: 'bold', marginTop: 10, marginBottom: 5 },
+    infoFila: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    separador: {
+        height: 1,
+        backgroundColor: '#C8E6C9',
+        marginVertical: 10,
+    },
+    infoLabel: { color: '#388E3C', fontSize: 14 },
+    infoValor: { fontWeight: 'bold', color: '#2E7D32' },
+    infoValorDestacado: { fontWeight: 'bold', color: '#2E7D32', fontSize: 18 },
+
+    label: { fontWeight: 'bold', marginTop: 15, marginBottom: 8, color: '#2c3e50' },
+
     input: {
         borderWidth: 1,
         borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 10,
+        borderRadius: 10,
+        padding: 12,
         fontSize: 16,
     },
     inputMultilinea: { height: 100, textAlignVertical: 'top' },
+
+    // Selector de tipo de plantación (badges)
+    tiposContenedor: {
+        flexDirection: 'row',  // Los badges van en fila
+        flexWrap: 'wrap',      // Si no caben, se van a la siguiente línea
+        gap: 8,
+    },
+    tipoBadge: {
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 20,       // Forma de pastilla
+        borderWidth: 1,
+        borderColor: '#4CAF50',
+        backgroundColor: 'white',
+    },
+    tipoBadgeSeleccionado: {
+        backgroundColor: '#4CAF50',  // Relleno verde cuando se selecciona
+    },
+    tipoBadgeTexto: {
+        color: '#4CAF50',
+        fontWeight: '600',
+    },
+    tipoBadgeTextoSeleccionado: {
+        color: 'white',
+    },
+
     botonImagen: {
         marginTop: 20,
         padding: 12,
@@ -151,8 +263,10 @@ const styles = StyleSheet.create({
     },
     botonImagenTexto: { color: '#4CAF50', fontWeight: 'bold' },
     preview: { width: '100%', height: 200, marginTop: 10, borderRadius: 8 },
+
     botonGuardar: {
         marginTop: 30,
+        marginBottom: 10,
         backgroundColor: '#4CAF50',
         padding: 15,
         borderRadius: 10,
