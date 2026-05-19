@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { guardarArea } from '../services/areasStorage';
 import { calcularHectareas } from '../utils/calcularArea';
+import { obtenerSesion } from '../services/authStorage';
 
 // Lista de tipos de plantacion disponibles
 const TIPOS_PLANTACION = [
@@ -52,6 +53,12 @@ export default function FormScreen({ navigation, route }) {
 
     // Función para guardar el área
     const handleGuardar = async () => {
+
+        if (!nombreArea.trim()) {
+            Alert.alert('Error', 'El nombre del área es obligatorio.');
+            return;
+        }
+
         if (!nombreAgricultor.trim()) {
             Alert.alert('Error', 'El nombre del agricultor es obligatorio.');
             return;
@@ -62,20 +69,26 @@ export default function FormScreen({ navigation, route }) {
             return;
         }
 
-        // Se arma el objeto del area
-        const nuevaArea = {
-            nombreArea,
-            nombreAgricultor,
-            tipoPlantacion,
-            comentario,
-            imagen,
-            vertices,
-            hectareas,
-        };
-
         try {
+
+            // Obtener el usuario actual de la sesion
+            const sesion = await obtenerSesion();
+
+            // Se arma el objeto del area
+            const nuevaArea = {
+                nombreArea,
+                nombreAgricultor,
+                tipoPlantacion,
+                comentario,
+                imagen,
+                vertices,
+                hectareas,
+            };
+
+
             // Se guarda el area en AsyncStorage
-            await guardarArea(nuevaArea);
+            await guardarArea(nuevaArea, Number(sesion.id));
+            
             Alert.alert('Éxito', 'Área guardada correctamente.', [
                 {
                     text: 'OK',
@@ -110,8 +123,8 @@ export default function FormScreen({ navigation, route }) {
                     {/* Si las hectareas son muy pequeñas, se muestra en m2 */}
                     <Text style = {styles.infoValorDestacado}>
                         {hectareas < 0.01 
-                            ? '${Math.round(hectareas * 10000)} m²'
-                            : '${hectareas} ha'
+                            ? `${Math.round(hectareas * 10000)} m²`
+                            : `${hectareas} ha`
                         }
                     </Text>
                 </View>

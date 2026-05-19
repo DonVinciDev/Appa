@@ -1,0 +1,43 @@
+
+
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       String   @default("usuario")
+  createdAt DateTime @default(now())
+
+  areas Area[]
+
+  @@map("usuarios")
+}
+
+model Area {
+  id                Int      @id @default(autoincrement())
+  nombreAgricultor  String   @map("nombre_agricultor")
+  tipoPlantacion    String   @map("tipo_plantacion")
+  comentario        String?
+  imagenUrl         String?  @map("imagen_url")
+  hectareas         Float
+  vertices          Json
+
+  usuarioId         Int      @map("usuario_id")
+  usuario           Usuario  @relation(fields: [usuarioId], references: [id])
+
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("areas")
+}

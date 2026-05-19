@@ -45,7 +45,7 @@ export default function MenuPrincipal({ navigation }) {
             
             {/* Muestra el nombre cuando ya cargo la sesión */}
             {usuario && (
-                <Text style = {styles.saludo}>¡Hola, {usuario.nombre.split(' ')[0]}!</Text>
+                <Text style={styles.saludo}>{`¡Hola, ${usuario.nombre}! a`}</Text>
             )}
         </View>
 

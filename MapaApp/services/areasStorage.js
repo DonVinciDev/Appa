@@ -1,57 +1,77 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-// Clave bajo la cual guardamos en el storage del dispositivo
-const STORAGE_KEY = "@mapaapp:areas";
+import { fetchAPI } from './api';
 
 
-// Obtiene todas las areas guardadas en un array, si no hay nada devuelve un array vacío
-export const obtenerAreas = async () => {
+export const obtenerAreasPorUsuario = async (usuarioId) => {
     try {
-        const json = await AsyncStorage.getItem(STORAGE_KEY);
-        // Se transforma a array con JSON.parse
-        return json ? JSON.parse(json) : [];
+        // El query param ?usuarioId=X filtra las áreas del usuario
+        const areas = await fetchAPI(`/areas?usuarioId=${usuarioId}`);
+        return areas;
     } catch (error) {
-        console.error("Error al leer áreas: ", error);
+        console.error('Error al obtener áreas:', error);
         return [];
-    }
-}
-
-// Guarda una nueva area en el starage, recibe el objeoto area y lo agrega a la lista
-export const guardarArea = async (nuevaArea) => {
-    try {
-        // Primero se obtiene las areas existentes
-        const areas = await obtenerAreas();
-
-        // Se agrega un id único y la fecha para identificarla facilemnte despues
-        const areaConId = {
-            ...nuevaArea,
-            id: Date.now().toString(), // id único basado en timestamp
-            fechaCreacion: new Date().toISOString(), // Fecha de creación
-        };
-
-        // Se crea un nuevo array con la nueva area al final
-        const nuevasAreas = [...areas, areaConId];
-
-        // Se convierte a string y se guarda en el storage
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nuevasAreas));
-
-        return areaConId; // Devuelve el área con su id asignado
-    } catch (error) {
-        console.error("Error al guardar área: ", error);
-        return error;
     }
 };
 
-// Eliminar le area por su id
-export const eliminarArea = async (id) => {
-    try {
-        // Se obtienen las areas existentes
-        const areas = await obtenerAreas();
+//Obtener TODAS las áreas (para supervisor) Llama a: GET /areas
+export const obtenerTodasLasAreas = async () => {
+  try {
+    const areas = await fetchAPI('/areas');
+    return areas;
+  } catch (error) {
+    console.error('Error al obtener todas las áreas:', error);
+    return [];
+  }
+};
 
-        // El .filter devuelve un nuevo array sin el area que queremos eliminar
-        const nuevasAreas = areas.filter(area => area.id !== id);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nuevasAreas));
-    } catch (error) {
-        console.error("Error al eliminar área: ", error);
-    }
+// Guardar una nueva area
+export const guardarArea = async (nuevaArea, usuarioId) => {
+  try {
+    // Armamos el objeto que el backend espera (CrearAreaDto)
+    const areaParaEnviar = {
+      nombreAgricultor: nuevaArea.nombreAgricultor,
+      tipoPlantacion: nuevaArea.tipoPlantacion,
+      comentario: nuevaArea.comentario || '',
+      imagenUrl: nuevaArea.imagen || null,
+      hectareas: nuevaArea.hectareas,
+      vertices: nuevaArea.vertices,
+      usuarioId: usuarioId,
+    };
+
+    const areaCreada = await fetchAPI('/areas', {
+      method: 'POST',
+      body: JSON.stringify(areaParaEnviar),
+    });
+
+    return areaCreada;
+
+  } catch (error) {
+    console.error('Error al guardar área:', error);
+    throw error;
+  }
+};
+
+
+export const eliminarArea = async (id) => {
+  try {
+    await fetchAPI(`/areas/${id}`, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    console.error('Error al eliminar área:', error);
+    throw error;
+  }
+};
+
+
+export const formatearFecha = (fecha) => {
+  try {
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch {
+    return 'Sin fecha';
+  }
 };

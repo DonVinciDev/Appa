@@ -5,7 +5,8 @@ import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { obtenerAreas } from '../services/areasStorage';
+import { obtenerAreasPorUsuario } from '../services/areasStorage';
+import { obtenerSesion } from '../services/authStorage';
 
 export default function MapaScreen({ navigation, route }) {
 
@@ -29,6 +30,11 @@ export default function MapaScreen({ navigation, route }) {
 
     // Area seleccionada que viene desde MisPuntosScreen para mostrarla en el mapa
     const [areaSeleccionada, setAreaSeleccionada] = useState(null);
+
+    // Panel que aparece al tocar un poligono en el mapa
+    const [panelArea, setPanelArea] = useState(null);
+
+
     // Efectos //
     
     // Pedir ubicacion al cargar la pantalla
@@ -54,9 +60,10 @@ export default function MapaScreen({ navigation, route }) {
     // Cargar el area seleccionada //
     useEffect(() => {
         // route.params?.areaSeleccionada = si existe route.params y tiene areaSeleccionada, se asigna a esta variable, sino es undefined
-        if (route.params?.areaParaMostrar) {
+        if (route.params?.areaSeleccionada) {
             const area = route.params.areaSeleccionada;
             setAreaSeleccionada(area);
+            setPanelArea(null);
 
             // Calcualr el centro del poligono para centrar el mapa
             const centro = calcularCentro(area.vertices);
@@ -82,7 +89,11 @@ export default function MapaScreen({ navigation, route }) {
     );
 
     const cargarAreas = async () => {
-        const areasGuardadas = await obtenerAreas();
+        const sesion = await obtenerSesion();
+        if (!sesion) return;
+
+        // Cargar solo las areas del usuario logueado
+        const areasGuardadas = await obtenerAreasPorUsuario(sesion.id);
         setAreas(areasGuardadas);
     };
 
@@ -104,6 +115,14 @@ export default function MapaScreen({ navigation, route }) {
 
     // Cuando el usuairo toca el mapa
     const handleToqueMapa = (event) => {
+
+        // Si hay un panel abierto, primero lo cierra
+        if (panelArea) {
+            setPanelArea(null);
+            return;
+        }
+
+
         // Solo se agregan vertices si estamos en modo dibujo
         if (!modoDibujo) return;
 
@@ -113,6 +132,12 @@ export default function MapaScreen({ navigation, route }) {
         // Se agrega el nuevo vertice al array existente
         // Esto copia los actuales y añade el nuevo
         setVerticesActuales([...verticesActuales, coordinate]);
+    };
+
+    // Al clickear un poligono guardado muestra el panel para ver detalles
+    const handleToquePoligono = (area) => {
+        setAreaSeleccionada(null); // Limpia el area resaltada
+        setPanelArea(area);
     };
 
     // Empezar a dibujar un nuevo area
@@ -153,6 +178,12 @@ export default function MapaScreen({ navigation, route }) {
         });
     };
 
+    // Ir a areas guardadas y abrir el detalle del area clickeada
+    const handleVerDetalles = (area) => {
+        setPanelArea(null);
+        navigation.navigate('MisPuntos', { areaId: area.id });
+    }
+
 
     // Render //
 
@@ -179,9 +210,16 @@ export default function MapaScreen({ navigation, route }) {
                     <Polygon
                         key = {area.id}
                         coordinates = {area.vertices} // El array de puntos que forman el poligono
-                        fillColor = "rgba(76, 175, 80, 0.3)" // Verde medio transparente
+                        fillColor = {
+                            // Si es el área del panel, se resalta mas
+                            panelArea?.id === area.id
+                                ? 'rgba(76, 175, 80, 0.6)'
+                                : 'rgba(76, 175, 80, 0.3)'
+                        }
                         stokeColor = "#4CAF50" // Verde solido para el borde
-                        strokeWidth = {2}
+                        strokeWidth = {panelArea?.id === area.id ? 4 : 2}
+                        tappable
+                        onPress = {() => handleToquePoligono(area)}
                     />
                 ))}
 
@@ -192,6 +230,8 @@ export default function MapaScreen({ navigation, route }) {
                         fillColor = "rgba(25, 118, 210, 0.3)" // Azul
                         strokeColor = "#1976D2" // Azul solido para el borde
                         strokeWidth = {3} // Un borde mas grueso para destacar el area seleccionada
+                        tappable
+                        onPress = {() => handleToquePoligono(areaSeleccionada)}
                     />
                 )}
 
@@ -218,7 +258,7 @@ export default function MapaScreen({ navigation, route }) {
             </MapView>
 
             {/* Info del area seleccionada */}
-            {areaSeleccionada && !modoDibujo && (
+            {areaSeleccionada && !modoDibujo && !panelArea &&(
                 <View style = {styles.panelAreaSeleccionada}>
                     <Text style = {styles.panelTipo}>{areaSeleccionada.tipoPlantacion}</Text>
                     <Text style = {styles.panelNombre}>{areaSeleccionada.nombreAgricultor}</Text>
@@ -231,9 +271,35 @@ export default function MapaScreen({ navigation, route }) {
                 </View>
             )}
 
+            {/* Mini panel al tocar un polígono en el mapa */}
+            {panelArea && !modoDibujo && (
+                <View style={styles.miniPanel}>
+                    <View style={styles.miniPanelInfo}>
+                        <Text style={styles.miniPanelTipo}>🌱 {panelArea.tipoPlantacion}</Text>
+                        <Text style={styles.miniPanelNombre}>{panelArea.nombreAgricultor}</Text>
+                        <Text style={styles.miniPanelHa}>{panelArea.hectareas} ha</Text>
+                    </View>
+
+                    <View style={styles.miniPanelBotones}>
+                        <TouchableOpacity
+                            style={styles.botonVerDetalles}
+                            onPress={() => handleVerDetalles(panelArea)}
+                        >
+                            <Text style={styles.botonVerDetallesTexto}>Ver detalles</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.botonCerrarPanel}
+                            onPress={() => setPanelArea(null)}
+                        >
+                            <Text style={styles.botonCerrarPanelTexto}>✕</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
 
             {/* Si no esta en modo dibujo, muestra el boton para empezar */ }
-            {!modoDibujo && (
+            {!modoDibujo && !panelArea && (
                 <TouchableOpacity style = {styles.botonFlotante} onPress = {iniciarDibujo}>
                     <Text style = {styles.botonTexto}>Dibujar área</Text>
                 </TouchableOpacity>
@@ -294,84 +360,56 @@ const styles = StyleSheet.create({
     mapa: { flex: 1 },
     cargando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-    // Panel info del área seleccionada (aparece en la parte superior del mapa)
+    // Panel área seleccionada desde MisPuntos
     panelAreaSeleccionada: {
-        position: 'absolute',
-        top: 15,
-        left: 15,
-        right: 15,
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 15,
-        elevation: 5,
-        borderLeftWidth: 4,
-        borderLeftColor: '#1976D2',  // Línea azul a la izquierda
+        position: 'absolute', top: 15, left: 15, right: 15,
+        backgroundColor: 'white', borderRadius: 12, padding: 15,
+        elevation: 5, borderLeftWidth: 4, borderLeftColor: '#1976D2',
     },
-    panelTipo: {
-        color: '#2E7D32',
-        fontWeight: 'bold',
-        fontSize: 12,
-        marginBottom: 4,
-    },
-    panelNombre: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#2c3e50',
-        marginBottom: 4,
-    },
+    panelTipo: { color: '#2E7D32', fontWeight: 'bold', fontSize: 12, marginBottom: 4 },
+    panelNombre: { fontSize: 16, fontWeight: 'bold', color: '#2c3e50', marginBottom: 4 },
     panelInfo: { color: 'gray', fontSize: 13, marginBottom: 8 },
-    panelCerrar: {
-        color: '#1976D2',
-        fontWeight: 'bold',
-        textAlign: 'right',
+    panelCerrar: { color: '#1976D2', fontWeight: 'bold', textAlign: 'right' },
+
+    // Mini panel al tocar un polígono
+    miniPanel: {
+        position: 'absolute', bottom: 30, left: 15, right: 15,
+        backgroundColor: 'white', borderRadius: 15, padding: 15,
+        elevation: 8, flexDirection: 'row',
+        alignItems: 'center', justifyContent: 'space-between',
     },
+    miniPanelInfo: { flex: 1 },
+    miniPanelTipo: { color: '#2E7D32', fontSize: 12, fontWeight: 'bold' },
+    miniPanelNombre: { fontSize: 15, fontWeight: 'bold', color: '#2c3e50', marginTop: 2 },
+    miniPanelHa: { color: '#4CAF50', fontWeight: 'bold', marginTop: 2 },
+    miniPanelBotones: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+    botonVerDetalles: {
+        backgroundColor: '#4CAF50', paddingHorizontal: 14,
+        paddingVertical: 8, borderRadius: 20,
+    },
+    botonVerDetallesTexto: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+    botonCerrarPanel: {
+        backgroundColor: '#f0f0f0', width: 32, height: 32,
+        borderRadius: 16, justifyContent: 'center', alignItems: 'center',
+    },
+    botonCerrarPanelTexto: { color: '#666', fontWeight: 'bold' },
 
     botonFlotante: {
-        position: 'absolute',
-        bottom: 30,
-        alignSelf: 'center',
-        backgroundColor: '#4CAF50',
-        paddingHorizontal: 25,
-        paddingVertical: 15,
-        borderRadius: 30,
-        elevation: 5,
+        position: 'absolute', bottom: 30, alignSelf: 'center',
+        backgroundColor: '#4CAF50', paddingHorizontal: 25,
+        paddingVertical: 15, borderRadius: 30, elevation: 5,
     },
     botonTexto: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
     panelDibujo: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'white',
-        padding: 15,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        elevation: 10,
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        backgroundColor: 'white', padding: 15,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10,
     },
-    contador: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: '#2c3e50',
-    },
-    instruccion: {
-        textAlign: 'center',
-        color: 'gray',
-        marginTop: 5,
-        marginBottom: 15,
-    },
-    botonesFila: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: 8,
-    },
-    botonPequeno: {
-        flex: 1,
-        padding: 12,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
+    contador: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', color: '#2c3e50' },
+    instruccion: { textAlign: 'center', color: 'gray', marginTop: 5, marginBottom: 15 },
+    botonesFila: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+    botonPequeno: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
     botonGris: { backgroundColor: '#757575' },
     botonVerde: { backgroundColor: '#4CAF50' },
     botonDeshabilitado: { backgroundColor: '#bdbdbd' },

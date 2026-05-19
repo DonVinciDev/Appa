@@ -6,11 +6,14 @@ import LoginScreen from './screens/LoginScreen';
 import MapaScreen from './screens/MapaScreen';
 import MisPuntosScreen from './screens/MisPuntosScreen';
 import FormScreen from './screens/FormScreen';
+import { useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Con esto se apilan las pantallas y se puede navegar entre ellas
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Login">
@@ -33,7 +36,7 @@ export default function App() {
         <Stack.Screen
           name="MisPuntos"
           component={MisPuntosScreen}
-          options={{ title: 'Mis Puntos áreas' }}
+          options={{ title: 'Mis áreas de cultivo registradas' }}
         />
         <Stack.Screen
           name="Formulario"

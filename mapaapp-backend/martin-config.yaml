@@ -1,0 +1,13 @@
+
+# COnfiguracion de Martin para servir tiles desde PostGIS
+
+# Puerto y direccion donde Martin escucha
+listen_addresses: "0.0.0.0:3111"
+
+# Conexion a la bd
+postgres:
+  connection_string: "postgresql://postgres:12341234@localhost:5432/mapaapp"
+
+  # Tablas que Martin va a servir como tiles
+  # Martin detectara auto. las tablas con columnas geometry+
+  auto_publish: true

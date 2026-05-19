@@ -1,40 +1,48 @@
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchAPI } from './api';
 
-const SESSION_KEY = '@mapaapp_session';
-
-// Usuarios precargados para simular el login
-const USUARIOS = [
-    { id: 1, nombre: 'Juan Pérez', email: 'juan@test.com', password: '1234' },
-    { id: 2, nombre: 'María Gómez', email: 'maria@test.com', password: '1234' },
-    { id: 3, nombre: 'Carlos López', email: 'carlos@test.com', password: '1234' }
-];
+// Clave donde guardamos la sesión activa en el dispositivo
+const SESSION_KEY = '@mapaapp:sesion';
 
 export const login = async (email, password) => {
+    try {
+        // POST /auth/login → envía las credenciales al backend
+        const usuario = await fetchAPI('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+        });
 
-    // Se busca el usuario en la lista de usuarios precargados
-    const usuario = USUARIOS.find(u => u.email === email.toLowerCase().trim() && u.password === password);
-
-    // Si no existe, retorna null
-    if (!usuario) return null;
-
-    // Si existe, se guarda la sesión en AsyncStorage sin pass por seguridad
-    const sesion = {
+        // Si el backend respondió correctamente, guardamos la sesión localmente
+        // Así el usuario no tiene que loguearse cada vez que abre la app
+        const sesion = {
         id: usuario.id,
         nombre: usuario.nombre,
-        email: usuario.email        
+        email: usuario.email,
+        rol: usuario.rol,
+        };
+
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sesion));
+        return sesion;
+
+    } catch (error) {
+        console.error('Error en login:', error);
+        return null; // null = credenciales incorrectas
+    }
     };
 
-    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sesion));
-
-    return sesion;
-};
-
-// Cierre de sesion
-export const logout = async () => {
+    // Cerrar sesión, solo borra la sesión local (no hay endpoint en el backend para esto)
+    export const logout = async () => {
     await AsyncStorage.removeItem(SESSION_KEY);
-};
+    };
 
-export const obtenerSesion = async () => {
-    const json = await AsyncStorage.getItem(SESSION_KEY);
-    return json ? JSON.parse(json) : null;
+    // Obtener la sesión activa, lee de AsyncStorage si hay un usuario logueado
+    export const obtenerSesion = async () => {
+    try {
+        const json = await AsyncStorage.getItem(SESSION_KEY);
+        return json ? JSON.parse(json) : null;
+    } catch (error) {
+        console.error('Error al obtener sesión:', error);
+        return null;
+    }
 };

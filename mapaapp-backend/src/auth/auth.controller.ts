@@ -1,0 +1,17 @@
+
+import { Controller, Post, Body } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+
+// @Controller('auth') = todas las rutas que empiezan con /auth
+@Controller('auth')
+export class AuthController {
+
+    constructor(private authService: AuthService) {}
+
+    // Extrae el cuerpo del request y lo valida con el LoginDto
+    @Post('login')
+    login(@Body() loginDto: LoginDto) {
+        return this.authService.login(loginDto);
+    }
+}
